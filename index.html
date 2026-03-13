@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>MISSILE COMMAND</title>
+<style>
+  :root { --green:#00ff41; --blue:#00cfff; --yellow:#ffe600; --dim:#003b0e; --bg:#000a02; }
+  /* iOS Safari ignores most text-shadow/box-shadow glows, so we rely on solid bright colours */
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { width:100%; height:100%; background:var(--bg); overflow:hidden; font-family: 'Courier New', Courier, monospace; touch-action:none; }
+
+#wrapper {
+position:fixed; inset:0;
+display:flex; flex-direction:column;
+align-items:center; justify-content:center;
+background:var(–bg);
+}
+
+#game-container {
+display:flex; flex-direction:column;
+align-items:stretch;
+max-width:100vw;
+}
+
+#hud {
+display:flex; justify-content:space-between; align-items:center;
+padding:7px 10px;
+border:2px solid #00ff41; border-bottom:none;
+background:#000000;
+}
+#hud span { color:#00ff41; font-family:‘Courier New’,Courier,monospace; font-size:13px; font-weight:900; letter-spacing:1px; white-space:nowrap; }
+#hud .val { color:#ffe600; }
+#hud .title { font-size:13px; letter-spacing:2px; }
+
+canvas { display:block; border-left:2px solid #00ff41; border-right:2px solid #00ff41; touch-action:none; }
+
+#ammo-bar {
+display:flex; justify-content:center; flex-wrap:wrap; gap:3px;
+padding:6px 10px; min-height:30px;
+border:2px solid #00ff41; border-top:2px solid #003300;
+background:#000000;
+}
+.ammo-pip { width:8px; height:15px; background:#00ff41; flex-shrink:0; border-radius:1px; }
+.ammo-pip.used { background:#001a00; border:1px solid #004400; }
+
+#overlay {
+position:fixed; inset:0;
+display:flex; flex-direction:column; align-items:center; justify-content:center;
+background:#000000; z-index:10;
+padding:20px;
+}
+#overlay h1 { font-family:‘Courier New’,Courier,monospace; font-size:clamp(28px,8vw,52px); font-weight:900; color:#00ff41; letter-spacing:4px; margin-bottom:6px; text-align:center; animation:flicker 3s infinite; }
+.sub { color:#00cfff; letter-spacing:3px; font-size:clamp(11px,2.5vw,14px); margin-bottom:20px; font-family:‘Courier New’,Courier,monospace; font-weight:bold; }
+button.big-btn { background:#000000; border:3px solid #00ff41; color:#00ff41; font-family:‘Courier New’,Courier,monospace; font-size:clamp(14px,3.5vw,18px); font-weight:900; letter-spacing:3px; padding:14px 32px; cursor:pointer; transition:background 0.2s; margin-top:12px; }
+button.big-btn:hover, button.big-btn:active { background:#003300; }
+.instructions { color:#00ff41; font-size:clamp(11px,2vw,13px); letter-spacing:1px; margin-top:16px; text-align:center; line-height:2.2; font-family:‘Courier New’,Courier,monospace; font-weight:bold; }
+
+@keyframes flicker { 0%,95%,100%{opacity:1} 96%{opacity:.6} 97%{opacity:1} 98%{opacity:.4} 99%{opacity:1} }
+.scanlines { position:fixed; inset:0; background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.08) 2px,rgba(0,0,0,0.08) 4px); pointer-events:none; z-index:5; }
+
+.screen { display:none; flex-direction:column; align-items:center; width:100%; max-width:420px; }
+.screen.active { display:flex; }
+
+.hs-table { width:100%; max-width:300px; margin:6px 0 16px; border-collapse:collapse; }
+.hs-table td { padding:5px 8px; font-size:clamp(12px,3vw,14px); letter-spacing:1px; font-family:‘Courier New’,Courier,monospace; font-weight:bold; }
+.hs-table .rank { color:#00ff41; width:28px; }
+.hs-table .ini  { color:#00ff41; width:48px; }
+.hs-table .pts  { color:#ffe600; text-align:right; }
+.hs-table tr.hi .ini, .hs-table tr.hi .pts { animation:pulse .7s infinite alternate; }
+@keyframes pulse { from{opacity:1} to{opacity:.3} }
+
+.entry-score { color:#ffe600; font-family:‘Courier New’,Courier,monospace; font-size:clamp(15px,4vw,20px); font-weight:900; letter-spacing:2px; margin-bottom:4px; }
+.entry-wave  { color:#00ff41; font-size:clamp(10px,2.5vw,12px); letter-spacing:2px; margin-bottom:16px; font-family:‘Courier New’,Courier,monospace; font-weight:bold; }
+.entry-label { color:#00cfff; letter-spacing:2px; font-size:clamp(10px,2.5vw,12px); margin-bottom:12px; font-family:‘Courier New’,Courier,monospace; font-weight:bold; }
+.pickers { display:flex; gap:14px; }
+.picker { display:flex; flex-direction:column; align-items:center; gap:6px; }
+.picker-letter { width:clamp(52px,15vw,66px); height:clamp(60px,17vw,74px); border:3px solid #00ff41; display:flex; align-items:center; justify-content:center; font-family:‘Courier New’,Courier,monospace; font-size:clamp(28px,9vw,40px); font-weight:900; color:#00ff41; background:#000000; }
+.arr-btn { width:clamp(52px,15vw,66px); height:clamp(36px,10vw,44px); background:#000000; border:2px solid #00ff41; color:#00ff41; font-size:clamp(16px,5vw,22px); cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background 0.15s; user-select:none; -webkit-user-select:none; font-weight:900; }
+.arr-btn:active { background:#003300; }
+</style>
+
+</head>
+<body>
+<div class="scanlines"></div>
+<div id="wrapper">
+  <div id="game-container">
+    <div id="hud">
+      <span>SCORE: <span class="val" id="score-display">0</span></span>
+      <span class="title">MISSILE CMD</span>
+      <span>WAVE: <span class="val" id="wave-display">1</span></span>
+    </div>
+    <canvas id="c"></canvas>
+    <div id="ammo-bar"></div>
+  </div>
+</div>
+
+<div id="overlay">
+  <div id="menu-screen" class="screen active">
+    <h1>MISSILE<br>COMMAND</h1>
+    <div class="sub">DEFEND THE CITIES</div>
+    <table class="hs-table" id="menu-hs"></table>
+    <button class="big-btn" onclick="startGame()">INSERT COIN</button>
+    <div class="instructions">TAP TO FIRE INTERCEPTOR MISSILE<br>SHOOT THE UFO TO RELOAD AMMO</div>
+  </div>
+  <div id="entry-screen" class="screen">
+    <h1 style="font-size:clamp(22px,7vw,32px);margin-bottom:4px;">GAME OVER</h1>
+    <div class="sub">NEW HIGH SCORE!</div>
+    <div class="entry-score" id="entry-score-val"></div>
+    <div class="entry-wave"  id="entry-wave-val"></div>
+    <div class="entry-label">ENTER YOUR INITIALS</div>
+    <div class="pickers" id="pickers"></div>
+    <button class="big-btn" onclick="submitInitials()">CONFIRM ▶</button>
+  </div>
+  <div id="scores-screen" class="screen">
+    <h1 style="font-size:clamp(22px,7vw,32px);margin-bottom:4px;">HIGH SCORES</h1>
+    <div class="sub" id="scores-sub"></div>
+    <table class="hs-table" id="final-hs"></table>
+    <button class="big-btn" onclick="backToMenu()">PLAY AGAIN</button>
+  </div>
+</div>
+
+<script>
+// ── STORAGE ───────────────────────────────────────────────────────────────────
+const KEY='mc_hiscores_v2';
+let highScores=[];
+async function loadScores(){ try{ const r=localStorage.getItem(KEY); if(r) highScores=JSON.parse(r); }catch(e){ highScores=[]; } }
+async function saveScores(){ try{ localStorage.setItem(KEY,JSON.stringify(highScores)); }catch(e){} }
+function isHighScore(s){ return highScores.length<10||s>highScores[highScores.length-1].score; }
+function insertScore(ini,s,w){ highScores.push({ini,score:s,wave:w}); highScores.sort((a,b)=>b.score-a.score); if(highScores.length>10)highScores=highScores.slice(0,10); saveScores(); }
+function renderHS(el,hl=null){ el.innerHTML=''; if(!highScores.length){el.innerHTML='<tr><td colspan="3" style="color:#336633;text-align:center;letter-spacing:1px;font-size:11px;padding:10px 0">NO SCORES YET</td></tr>';return;} let marked=false; highScores.forEach((e,i)=>{const tr=document.createElement('tr');if(!marked&&hl!==null&&e.score===hl){tr.classList.add('hi');marked=true;}tr.innerHTML=`<td class="rank">${i+1}.</td><td class="ini">${e.ini}</td><td class="pts">${e.score.toLocaleString()}</td>`;el.appendChild(tr);}); }
+
+// ── AUDIO ─────────────────────────────────────────────────────────────────────
+let AC,MG;
+function initAudio(){ if(AC)return; AC=new(window.AudioContext||window.webkitAudioContext)(); MG=AC.createGain(); MG.gain.value=.4; MG.connect(AC.destination); }
+const ps=fn=>{if(!AC)return;try{fn();}catch(e){}};
+const mkOsc=(f,type='sine')=>{const o=AC.createOscillator(),g=AC.createGain();o.connect(g);g.connect(MG);o.type=type;o.frequency.value=f;return{o,g};};
+function sfxLaunch(){ ps(()=>{ const t=AC.currentTime,{o,g}=mkOsc(180,'square'); o.frequency.exponentialRampToValueAtTime(900,t+.12);g.gain.setValueAtTime(.3,t);g.gain.exponentialRampToValueAtTime(.001,t+.18);o.start(t);o.stop(t+.18); }); }
+function sfxBoom(){ ps(()=>{ const t=AC.currentTime,{o,g}=mkOsc(120); o.frequency.exponentialRampToValueAtTime(30,t+.3);g.gain.setValueAtTime(.6,t);g.gain.exponentialRampToValueAtTime(.001,t+.35);o.start(t);o.stop(t+.35); const buf=AC.createBuffer(1,AC.sampleRate*.2,AC.sampleRate),d=buf.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;const n=AC.createBufferSource(),ng=AC.createGain(),f=AC.createBiquadFilter();f.type='bandpass';f.frequency.value=800;n.buffer=buf;n.connect(f);f.connect(ng);ng.connect(MG);ng.gain.setValueAtTime(.4,t);ng.gain.exponentialRampToValueAtTime(.001,t+.2);n.start(t);n.stop(t+.2); }); }
+function sfxImpact(){ ps(()=>{ const t=AC.currentTime,{o,g}=mkOsc(80,'sawtooth'); o.frequency.exponentialRampToValueAtTime(20,t+.25);g.gain.setValueAtTime(.5,t);g.gain.exponentialRampToValueAtTime(.001,t+.28);o.start(t);o.stop(t+.28); }); }
+function sfxCity(){ ps(()=>{ const t=AC.currentTime;for(let i=0;i<3;i++){const{o,g}=mkOsc(600,'sawtooth'),s=t+i*.18;o.frequency.setValueAtTime(600,s);o.frequency.exponentialRampToValueAtTime(100,s+.15);g.gain.setValueAtTime(.35,s);g.gain.exponentialRampToValueAtTime(.001,s+.18);o.start(s);o.stop(s+.18);} }); }
+function sfxKill(){ ps(()=>{ const t=AC.currentTime;[880,1100,1320].forEach((f,i)=>{const{o,g}=mkOsc(f,'triangle'),s=t+i*.04;g.gain.setValueAtTime(.25,s);g.gain.exponentialRampToValueAtTime(.001,s+.15);o.start(s);o.stop(s+.15);}); }); }
+function sfxWave(){ ps(()=>{ const t=AC.currentTime;[261,329,392,523,659,784,1046].forEach((f,i)=>{const{o,g}=mkOsc(f,'square'),s=t+i*.07;g.gain.setValueAtTime(.2,s);g.gain.exponentialRampToValueAtTime(.001,s+.25);o.start(s);o.stop(s+.25);}); }); }
+function sfxOver(){ ps(()=>{ const t=AC.currentTime;[392,330,277,220,185,147].forEach((f,i)=>{const{o,g}=mkOsc(f,'sawtooth'),s=t+i*.18;g.gain.setValueAtTime(.3,s);g.gain.exponentialRampToValueAtTime(.001,s+.35);o.start(s);o.stop(s+.35);}); }); }
+function sfxNoAmmo(){ ps(()=>{ const t=AC.currentTime,{o,g}=mkOsc(80,'square');g.gain.setValueAtTime(.2,t);g.gain.exponentialRampToValueAtTime(.001,t+.08);o.start(t);o.stop(t+.08); }); }
+function sfxTick(){ ps(()=>{ const t=AC.currentTime,{o,g}=mkOsc(520,'square');g.gain.setValueAtTime(.12,t);g.gain.exponentialRampToValueAtTime(.001,t+.06);o.start(t);o.stop(t+.06); }); }
+function sfxUFO(){ ps(()=>{ const t=AC.currentTime,{o,g}=mkOsc(300,'sawtooth');o.frequency.setValueAtTime(300,t);o.frequency.linearRampToValueAtTime(500,t+.15);o.frequency.linearRampToValueAtTime(200,t+.3);o.frequency.linearRampToValueAtTime(400,t+.45);g.gain.setValueAtTime(.25,t);g.gain.exponentialRampToValueAtTime(.001,t+.5);o.start(t);o.stop(t+.5); }); }
+function sfxAmmoReload(){ ps(()=>{ const t=AC.currentTime;[440,550,660,880].forEach((f,i)=>{const{o,g}=mkOsc(f,'square'),s=t+i*.06;g.gain.setValueAtTime(.2,s);g.gain.exponentialRampToValueAtTime(.001,s+.12);o.start(s);o.stop(s+.12);}); }); }
+
+// ── CANVAS SIZING ─────────────────────────────────────────────────────────────
+const canvas=document.getElementById('c'), ctx=canvas.getContext('2d');
+// Internal resolution
+const IW=800, IH=520;
+canvas.width=IW; canvas.height=IH;
+
+let scale=1; // CSS px per canvas px — used for input coordinate mapping
+
+function resizeCanvas(){
+  const hudH = document.getElementById('hud').offsetHeight || 30;
+  const ammoH = document.getElementById('ammo-bar').offsetHeight || 26;
+  const chrome = hudH + ammoH + 4; // borders
+  const availW = window.innerWidth;
+  const availH = window.innerHeight - chrome;
+  scale = Math.min(availW / IW, availH / IH);
+  const cssW = Math.floor(IW * scale);
+  const cssH = Math.floor(IH * scale);
+  canvas.style.width = cssW + 'px';
+  canvas.style.height = cssH + 'px';
+  const container = document.getElementById('game-container');
+  container.style.width = cssW + 'px';
+}
+window.addEventListener('resize', resizeCanvas);
+window.addEventListener('orientationchange', ()=>setTimeout(resizeCanvas,100));
+
+// ── GAME COORDS ───────────────────────────────────────────────────────────────
+// All game logic uses IW x IH coordinates; input events are mapped via scale.
+const W=IW, H=IH;
+const GY=H-50, MAX_AMMO=30;
+let state='menu',score=0,wave=1,ammo=MAX_AMMO;
+let missiles=[],interceptors=[],explosions=[],particles=[],cities=[],bases=[];
+let frameCount=0,spawnTimer=0,missilesSpawned=0,missileQuota=0;
+let waveAnnounceTimer=0;
+const WAVE_ANNOUNCE_DURATION=180;
+let mouseX,mouseY;
+
+// UFO
+let ufo=null, ufoTimer=0;
+const UFO_Y=38, UFO_INTERVAL=1200, UFO_AMMO_GRANT=10;
+
+const CX=[80,170,260,540,630,720], BX=[50,400,750];
+
+function getEventPos(e){
+  const r=canvas.getBoundingClientRect();
+  const clientX=e.touches?e.touches[0].clientX:e.clientX;
+  const clientY=e.touches?e.touches[0].clientY:e.clientY;
+  return { x:(clientX-r.left)/scale, y:(clientY-r.top)/scale };
+}
+
+// ── GAME LOGIC ────────────────────────────────────────────────────────────────
+function initLevel(){
+  missiles=[];interceptors=[];explosions=[];particles=[];spawnTimer=0;frameCount=0;
+  missilesSpawned=0; missileQuota=8+(wave-1)*4;
+  waveAnnounceTimer=WAVE_ANNOUNCE_DURATION;
+  ufo=null; ufoTimer=Math.floor(UFO_INTERVAL*0.4);
+  if(wave===1){cities=CX.map(x=>({x,alive:true}));bases=BX.map(x=>({x,alive:true}));ammo=MAX_AMMO;}
+  else ammo=Math.min(ammo+5,MAX_AMMO);
+  updateAmmoBar();
+}
+
+function updateAmmoBar(){
+  const bar=document.getElementById('ammo-bar');bar.innerHTML='';
+  for(let i=0;i<MAX_AMMO;i++){const p=document.createElement('div');p.className='ammo-pip'+(i>=ammo?' used':'');bar.appendChild(p);}
+}
+
+function spawnMissile(){
+  const tgts=[...cities.filter(c=>c.alive),...bases.filter(b=>b.alive)];
+  if(!tgts.length)return;
+  const t=tgts[Math.floor(Math.random()*tgts.length)];
+  missiles.push({x:Math.random()*W,y:0,tx:t.x,ty:GY,speed:.8+wave*.15+Math.random()*.5,trail:[],color:Math.random()<.3?'#ff4444':'#ff8888'});
+}
+
+function spawnUFO(){
+  const goRight=Math.random()<.5;
+  ufo={x:goRight?-60:W+60,y:UFO_Y,vx:goRight?1.8+wave*.15:-(1.8+wave*.15),r:28,phase:0,labelTimer:120};
+  sfxUFO();
+}
+
+function fireInterceptor(tx,ty){
+  let best=null,bd=Infinity;
+  for(const b of bases){if(!b.alive)continue;const d=Math.hypot(tx-b.x,ty-(GY-10));if(d<bd){bd=d;best=b;}}
+  if(!best)return;
+  if(ammo<=0){sfxNoAmmo();return;}
+  ammo--;updateAmmoBar();sfxLaunch();
+  interceptors.push({x:best.x,y:GY-10,tx,ty,speed:6,trail:[]});
+}
+
+function addExp(x,y,r,color,fi=false){explosions.push({x,y,r:4,maxR:r,growing:true,color,alpha:1,fi});}
+function addParts(x,y,color,n=8){for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2,s=1+Math.random()*4;particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:1,color});}}
+
+function drawUFO(x,y,r,phase,alpha=1){
+  ctx.save(); ctx.globalAlpha=alpha; ctx.translate(x,y);
+  const glow='#ff00ff'; ctx.shadowColor=glow; ctx.shadowBlur=14;
+  ctx.strokeStyle=glow; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.ellipse(0,0,r,r*.38,0,0,Math.PI*2); ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(0,-r*.28,r*.52,r*.32,0,Math.PI,Math.PI*2); ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(0,r*.06,r*.62,r*.18,0,0,Math.PI*2); ctx.stroke();
+  for(let i=0;i<6;i++){const a=(i/6)*Math.PI*2+phase,px=Math.cos(a)*r*.62,py=Math.sin(a)*r*.18+r*.06;if(py<r*.28){ctx.beginPath();ctx.arc(px,py,2.5,0,Math.PI*2);ctx.fillStyle=(Math.floor(frameCount/8+i)%2===0)?glow:'#660066';ctx.fill();}}
+  if(Math.floor(frameCount/6)%3!==0){const bG=ctx.createLinearGradient(0,r*.3,0,r*1.1);bG.addColorStop(0,'rgba(255,0,255,0.5)');bG.addColorStop(1,'rgba(255,0,255,0)');ctx.beginPath();ctx.moveTo(-r*.3,r*.3);ctx.lineTo(-r*.55,r*1.1);ctx.lineTo(r*.55,r*1.1);ctx.lineTo(r*.3,r*.3);ctx.closePath();ctx.fillStyle=bG;ctx.fill();}
+  ctx.restore();
+}
+
+function killUFO(){
+  addExp(ufo.x,ufo.y,70,'#ff00ff',false); addParts(ufo.x,ufo.y,'#ff00ff',20); addParts(ufo.x,ufo.y,'#ffffff',10);
+  score+=500*wave; document.getElementById('score-display').textContent=score.toLocaleString();
+  particles.push({x:ufo.x,y:ufo.y,vx:0,vy:-1.2,life:1.5,color:'#ff00ff',text:'+'+UFO_AMMO_GRANT+' AMMO',isText:true});
+  ammo=Math.min(ammo+UFO_AMMO_GRANT,MAX_AMMO); updateAmmoBar(); sfxAmmoReload(); ufo=null;
+}
+
+function update(){
+  if(state!=='playing')return;
+  frameCount++;
+
+  if(waveAnnounceTimer>0){waveAnnounceTimer--;return;}
+
+  // UFO
+  ufoTimer++;
+  if(!ufo&&ufoTimer>=UFO_INTERVAL){ufoTimer=0;spawnUFO();}
+  if(ufo){
+    ufo.x+=ufo.vx; ufo.y=UFO_Y+Math.sin(frameCount*.04)*6; ufo.phase+=.04;
+    if(ufo.labelTimer>0)ufo.labelTimer--;
+    if(ufo.x<-80||ufo.x>W+80)ufo=null;
+  }
+
+  // Spawn missiles
+  const rate=Math.max(90-wave*8,25);
+  if(missilesSpawned<missileQuota){
+    if(++spawnTimer>=rate){
+      spawnTimer=0;spawnMissile();missilesSpawned++;
+      if(wave>4&&Math.random()<.35&&missilesSpawned<missileQuota){spawnMissile();missilesSpawned++;}
+    }
+  }
+
+  for(let i=missiles.length-1;i>=0;i--){
+    const m=missiles[i],dx=m.tx-m.x,dy=m.ty-m.y,d=Math.hypot(dx,dy);
+    if(d<m.speed){
+      addExp(m.x,GY,30,'#ff4400');addParts(m.x,GY,'#ff6600',12);sfxImpact();missiles.splice(i,1);
+      let hit=false;
+      for(const c of cities){if(c.alive&&Math.abs(c.x-m.tx)<20){c.alive=false;hit=true;sfxCity();break;}}
+      if(!hit)for(const b of bases){if(b.alive&&Math.abs(b.x-m.tx)<20){b.alive=false;break;}}
+      continue;
+    }
+    m.trail.push({x:m.x,y:m.y});if(m.trail.length>40)m.trail.shift();
+    m.x+=(dx/d)*m.speed;m.y+=(dy/d)*m.speed;
+  }
+
+  for(let i=interceptors.length-1;i>=0;i--){
+    const p=interceptors[i],dx=p.tx-p.x,dy=p.ty-p.y,d=Math.hypot(dx,dy);
+    if(d<p.speed){addExp(p.tx,p.ty,45+wave*3,'#00cfff',true);addParts(p.tx,p.ty,'#00cfff',10);sfxBoom();interceptors.splice(i,1);continue;}
+    p.trail.push({x:p.x,y:p.y});if(p.trail.length>20)p.trail.shift();
+    p.x+=(dx/d)*p.speed;p.y+=(dy/d)*p.speed;
+  }
+
+  for(let i=explosions.length-1;i>=0;i--){
+    const e=explosions[i];
+    if(e.growing){
+      e.r+=e.maxR/18;if(e.r>=e.maxR)e.growing=false;
+      if(e.fi){
+        for(let j=missiles.length-1;j>=0;j--){if(Math.hypot(missiles[j].x-e.x,missiles[j].y-e.y)<e.r){score+=25*wave;sfxKill();addParts(missiles[j].x,missiles[j].y,'#ffe600',8);missiles.splice(j,1);document.getElementById('score-display').textContent=score.toLocaleString();}}
+        if(ufo&&Math.hypot(ufo.x-e.x,ufo.y-e.y)<e.r+ufo.r)killUFO();
+      }
+    } else {e.r-=e.maxR/30;e.alpha-=.04;if(e.alpha<=0)explosions.splice(i,1);}
+  }
+
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i];
+    if(p.isText){p.x+=p.vx;p.y+=p.vy;p.life-=.012;if(p.life<=0)particles.splice(i,1);}
+    else{p.x+=p.vx;p.y+=p.vy;p.vy+=.1;p.life-=.025;if(p.life<=0)particles.splice(i,1);}
+  }
+
+  // Wave clear
+  if(missilesSpawned>=missileQuota&&missiles.length===0&&interceptors.length===0&&explosions.length===0){
+    score+=ammo*5*wave;document.getElementById('score-display').textContent=score.toLocaleString();
+    sfxWave();wave++;document.getElementById('wave-display').textContent=wave;initLevel();return;
+  }
+
+  if(!cities.some(c=>c.alive)){state='gameover';sfxOver();setTimeout(onGameOver,1500);}
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#000a02';ctx.fillRect(0,0,W,H);
+
+  for(let i=0;i<80;i++){const sx=(i*137+17)%W,sy=(i*89+31)%(GY-10),tw=Math.sin(frameCount*.03+i)*.5+.5;ctx.globalAlpha=tw*.4;ctx.fillStyle='rgba(0,255,65,0.3)';ctx.fillRect(sx,sy,1,1);}
+  ctx.globalAlpha=1;
+
+  const gg=ctx.createLinearGradient(0,GY,0,H);gg.addColorStop(0,'#003b0e');gg.addColorStop(1,'#001a06');
+  ctx.fillStyle=gg;ctx.fillRect(0,GY,W,H-GY);
+  ctx.strokeStyle='#00ff41';ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(0,GY);ctx.lineTo(W,GY);ctx.stroke();
+
+  for(const c of cities){if(!c.alive)continue;ctx.fillStyle='#00ff41';ctx.fillRect(c.x-16,GY-12,8,12);ctx.fillRect(c.x-6,GY-20,12,20);ctx.fillRect(c.x+8,GY-14,8,14);}
+  for(const b of bases){if(!b.alive)continue;ctx.fillStyle='#00cfff';ctx.fillRect(b.x-14,GY-8,28,8);ctx.fillRect(b.x-4,GY-14,8,6);}
+
+  if(ufo){
+    drawUFO(ufo.x,ufo.y,ufo.r,ufo.phase);
+    if(ufo.labelTimer>0){const a=Math.min(1,ufo.labelTimer/40);ctx.globalAlpha=a;ctx.font='bold 11px "Share Tech Mono"';ctx.fillStyle='#ff00ff';ctx.textAlign='center';ctx.shadowColor='#ff00ff';ctx.shadowBlur=8;ctx.fillText('SHOOT FOR AMMO',ufo.x,ufo.y+ufo.r+16);ctx.shadowBlur=0;ctx.globalAlpha=1;}
+  }
+
+  for(const m of missiles){
+    if(m.trail.length>1){ctx.beginPath();ctx.moveTo(m.trail[0].x,m.trail[0].y);for(let i=1;i<m.trail.length;i++)ctx.lineTo(m.trail[i].x,m.trail[i].y);ctx.strokeStyle=m.color;ctx.lineWidth=1.5;ctx.globalAlpha=.5;ctx.stroke();ctx.globalAlpha=1;}
+    ctx.fillStyle=m.color;ctx.beginPath();ctx.arc(m.x,m.y,3,0,Math.PI*2);ctx.fill();
+  }
+  for(const p of interceptors){
+    if(p.trail.length>1){ctx.beginPath();ctx.moveTo(p.trail[0].x,p.trail[0].y);for(let i=1;i<p.trail.length;i++)ctx.lineTo(p.trail[i].x,p.trail[i].y);ctx.strokeStyle='#00cfff';ctx.lineWidth=2;ctx.globalAlpha=.7;ctx.stroke();ctx.globalAlpha=1;}
+    ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(p.x,p.y,3,0,Math.PI*2);ctx.fill();
+  }
+  for(const e of explosions){
+    ctx.globalAlpha=e.alpha*.3;ctx.fillStyle=e.color;ctx.shadowColor=e.color;ctx.shadowBlur=20;ctx.beginPath();ctx.arc(e.x,e.y,e.r,0,Math.PI*2);ctx.fill();
+    ctx.globalAlpha=e.alpha*.8;ctx.strokeStyle=e.color;ctx.lineWidth=2;ctx.beginPath();ctx.arc(e.x,e.y,e.r,0,Math.PI*2);ctx.stroke();ctx.shadowBlur=0;ctx.globalAlpha=1;
+  }
+  for(const p of particles){
+    if(p.isText){ctx.globalAlpha=Math.min(1,p.life);    ctx.font='bold 13px "Courier New",monospace';ctx.fillStyle=p.color;ctx.textAlign='center';ctx.shadowColor=p.color;ctx.shadowBlur=10;ctx.fillText(p.text,p.x,p.y);ctx.shadowBlur=0;}
+    else{ctx.globalAlpha=p.life;ctx.fillStyle=p.color;ctx.fillRect(p.x-1,p.y-1,2,2);}
+  }
+  ctx.globalAlpha=1;ctx.textAlign='left';
+
+  // Wave announcement
+  if(waveAnnounceTimer>0){
+    const progress=waveAnnounceTimer/WAVE_ANNOUNCE_DURATION;
+    let alpha=1;
+    if(progress>0.8) alpha=(1-progress)/0.2;
+    else if(progress<0.25) alpha=progress/0.25;
+    const cx=W/2,cy=H/2;
+    ctx.save();ctx.globalAlpha=alpha;
+    ctx.font='bold 22px "Courier New",monospace';ctx.fillStyle='#00ff41';ctx.textAlign='center';ctx.shadowColor='#00ff41';ctx.shadowBlur=40;
+    ctx.fillText('WAVE',cx,cy-28);
+    ctx.font='bold 88px "Courier New",monospace';ctx.fillStyle='#ffe600';ctx.shadowColor='#ffe600';ctx.shadowBlur=50;
+    ctx.fillText(wave,cx,cy+60);
+    ctx.restore();ctx.textAlign='left';
+  }
+
+  // Crosshair (desktop only)
+  if(mouseX!==undefined&&state==='playing'){
+    ctx.strokeStyle='rgba(0,207,255,0.5)';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(mouseX-12,mouseY);ctx.lineTo(mouseX+12,mouseY);ctx.moveTo(mouseX,mouseY-12);ctx.lineTo(mouseX,mouseY+12);ctx.stroke();
+    ctx.beginPath();ctx.arc(mouseX,mouseY,6,0,Math.PI*2);ctx.stroke();
+  }
+}
+
+// ── INPUT ─────────────────────────────────────────────────────────────────────
+canvas.addEventListener('mousemove',e=>{const p=getEventPos(e);mouseX=p.x;mouseY=p.y;});
+canvas.addEventListener('click',e=>{if(state!=='playing')return;const p=getEventPos(e);fireInterceptor(p.x,p.y);});
+canvas.addEventListener('touchstart',e=>{e.preventDefault();if(state!=='playing')return;const p=getEventPos(e);fireInterceptor(p.x,p.y);},{passive:false});
+
+// ── INITIALS ──────────────────────────────────────────────────────────────────
+const ALPHA='ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+let letterIdx=[0,0,0];
+function buildPickers(){const c=document.getElementById('pickers');c.innerHTML='';for(let i=0;i<3;i++){const col=document.createElement('div');col.className='picker';const up=document.createElement('button');up.className='arr-btn';up.textContent='▲';up.onclick=(idx=>()=>{letterIdx[idx]=(letterIdx[idx]+1)%26;updatePickers();sfxTick();})(i);const box=document.createElement('div');box.className='picker-letter';box.id='pl'+i;box.textContent=ALPHA[letterIdx[i]];const dn=document.createElement('button');dn.className='arr-btn';dn.textContent='▼';dn.onclick=(idx=>()=>{letterIdx[idx]=(letterIdx[idx]+25)%26;updatePickers();sfxTick();})(i);col.append(up,box,dn);c.appendChild(col);}}
+function updatePickers(){for(let i=0;i<3;i++){const b=document.getElementById('pl'+i);if(b)b.textContent=ALPHA[letterIdx[i]];}}
+function submitInitials(){insertScore(letterIdx.map(i=>ALPHA[i]).join(''),score,wave);showScores(score);}
+
+// ── SCREENS ───────────────────────────────────────────────────────────────────
+function showScreen(id){document.getElementById('overlay').style.display='flex';document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active');}
+function hideOverlay(){document.getElementById('overlay').style.display='none';}
+function backToMenu(){renderHS(document.getElementById('menu-hs'));showScreen('menu-screen');}
+function showScores(hl){document.getElementById('scores-sub').textContent='WAVE '+wave+' REACHED';renderHS(document.getElementById('final-hs'),hl);showScreen('scores-screen');}
+function onGameOver(){if(isHighScore(score)){letterIdx=[0,0,0];buildPickers();document.getElementById('entry-score-val').textContent='SCORE: '+score.toLocaleString();document.getElementById('entry-wave-val').textContent='WAVE '+wave+' REACHED';state='entry';showScreen('entry-screen');}else{showScores(null);}}
+
+function startGame(){
+  initAudio();score=0;wave=1;
+  document.getElementById('score-display').textContent='0';
+  document.getElementById('wave-display').textContent='1';
+  hideOverlay();initLevel();state='playing';
+}
+
+// ── BOOT ─────────────────────────────────────────────────────────────────────
+(async()=>{
+  await loadScores();
+  resizeCanvas();
+  renderHS(document.getElementById('menu-hs'));
+  showScreen('menu-screen');
+  requestAnimationFrame(function loop(){update();draw();requestAnimationFrame(loop);});
+})();
+</script>
+
+</body>
+</html>
